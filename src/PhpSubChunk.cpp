@@ -381,6 +381,11 @@ SUB_CHUNK_METHOD(getBlockLayers) {
 	zend_parse_parameters_none_throw();
 
 	auto intern = sub_chunk_this();
+	if (intern->blockLayers.empty()) {
+		//most subchunks in a world are air, and the immutable empty array costs nothing to hand out
+		RETURN_EMPTY_ARRAY();
+	}
+
 	array_init_size(return_value, intern->blockLayers.size());
 	for (auto layer : intern->blockLayers) {
 		zval zv;
