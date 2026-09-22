@@ -19,6 +19,9 @@ while the clock said it was 12% faster; that was noise, not a finding. Instructi
 deterministic, so they're what this report is built on. Elapsed time is in `README.md`, measured
 separately with min-of-N.
 
+Instruction counts were re-measured on the PocketMine PHP binary; those numbers, and the price of
+the `getBlockLayers()` regression, are in `server-run.md`.
+
 ## Method
 
 `perf-phase.php` performs a fixed setup (24 chunks built and serialized), then repeats one phase R

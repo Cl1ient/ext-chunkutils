@@ -36,6 +36,10 @@ php -d extension=modules/chunkutils2.so -d extension=<ext-encoding>/modules/enco
     benchmarks/altay/bench-altay.php
 ```
 
+These numbers come from a CLI harness on a distribution PHP. For the same measurements taken on a
+running server with the PocketMine binary — which is what to quote — see `server-run.md`; the gains
+there are roughly half of these, because a server also runs the generator this doesn't touch.
+
 ## Results
 
 Times for the whole batch of 48 chunks, median of 5 runs. Run-to-run spread was under 4% except on
