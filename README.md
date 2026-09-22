@@ -11,6 +11,7 @@ At the time of writing:
 - `\pocketmine\world\format\PalettedBlockArray`: This class implements paletted block-storages as per modern MCPE since 1.2.13.
 - `\pocketmine\world\format\io\SubChunkConverter`: This class contains a series of helper methods for upgrading legacy world terrain.
 - `\pocketmine\world\format\LightArray`: Implements a 16x16x16 nibble array used for light storage.
+- `\pocketmine\world\format\SubChunk`: Implements a 16x16x16 chunk section, holding its block layers, biome palette and light arrays.
 
 ## What's in the folders?
 - `gsl`: Subtree merge of https://github.com/microsoft/GSL
