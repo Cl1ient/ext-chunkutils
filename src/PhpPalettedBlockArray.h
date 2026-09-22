@@ -9,6 +9,7 @@ PHP_METHOD(PhpPalettedBlockArray, __construct);
 PHP_METHOD(PhpPalettedBlockArray, fromData);
 PHP_METHOD(PhpPalettedBlockArray, getWordArray);
 PHP_METHOD(PhpPalettedBlockArray, getPalette);
+PHP_METHOD(PhpPalettedBlockArray, getPaletteBytes);
 PHP_METHOD(PhpPalettedBlockArray, getMaxPaletteSize);
 PHP_METHOD(PhpPalettedBlockArray, getBitsPerBlock);
 PHP_METHOD(PhpPalettedBlockArray, get);
