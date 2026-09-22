@@ -94,5 +94,34 @@ The palette encoding costs **436 instructions per palette plus 139 per entry** h
 This table also prices the one regression: the full configuration spends **1,950 more instructions
 per chunk** than palette-only on serialization, which is 24 calls to `getBlockLayers()` at **81
 instructions each**. That is the native version building a fresh array of objects where the PHP one
-returned the array it already held. It costs 1.7% of a chunk's serialization and is worth fixing by
-caching the array, but it doesn't threaten the result.
+returned the array it already held.
+
+## Caching that array makes things worse
+
+The obvious fix is to keep the array inside the subchunk and drop it whenever the layers change.
+It was implemented, tested and measured, and it is not in the extension, because it loses:
+
+| | serialize 441 chunks | server RSS |
+|---|---|---|
+| building the array on every call | 4.83 ms | 280.79 MB |
+| **caching it** | **5.08 ms** | **283.50 MB** |
+
+By instruction count the cache wins — 3,545 fewer instructions per chunk serialized (-3.1%), and
+`getBlockLayers()` alone drops from 25.3 ns to 11.7 ns, which is faster than the PHP version's
+14.7 ns. By the clock it loses, on the real server and in the CLI harness alike.
+
+Allocating and freeing the same small array on every call is friendlier to the machine than it
+looks: it comes straight back off the allocator's free list, still hot in L1. A cached array lives
+somewhere else in the heap and is touched once per chunk, so it is a cache miss every time. Fewer
+instructions, more stalls.
+
+It also costs memory. Every subchunk that has ever been asked for its layers keeps an array alive:
+about 283 bytes each, 2.7 MB across 441 chunks — most of what the native SubChunk saves in the first
+place. A world where subchunks are mostly air would pay less, but PocketMine's generator writes air
+explicitly, so in practice all 24 subchunks of a chunk hold a layer.
+
+Filling the array with `ZEND_HASH_FILL_PACKED` instead of `add_next_index_zval` was also tried and
+gained nothing (24.9 ns against 25.3 ns): the cost is the allocation, not the insertion.
+
+What did survive is handing out the shared immutable empty array when a subchunk has no layers,
+which costs nothing and skips the allocation entirely for air subchunks.

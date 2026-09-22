@@ -19,8 +19,9 @@ while the clock said it was 12% faster; that was noise, not a finding. Instructi
 deterministic, so they're what this report is built on. Elapsed time is in `README.md`, measured
 separately with min-of-N.
 
-Instruction counts were re-measured on the PocketMine PHP binary; those numbers, and the price of
-the `getBlockLayers()` regression, are in `server-run.md`.
+Instruction counts were re-measured on the PocketMine PHP binary; those numbers, the price of the
+`getBlockLayers()` regression, and why caching that array makes the server slower despite executing
+fewer instructions, are in `server-run.md`.
 
 ## Method
 
