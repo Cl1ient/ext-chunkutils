@@ -11,10 +11,10 @@ final class PalettedBlockArray{
 	public function __construct(int $fillEntry){}
 
 	/**
-	 * @param int[] $palette
+	 * @param string|int[] $palette
 	 * @throws PalettedBlockArrayLoadException if the provided data is invalid in any way
 	 */
-	public static function fromData(int $bitsPerBlock, string $wordArray, array $palette) : \pocketmine\world\format\PalettedBlockArray{}
+	public static function fromData(int $bitsPerBlock, string $wordArray, array|string $palette) : \pocketmine\world\format\PalettedBlockArray{}
 
 	public function getWordArray() : string{}
 
@@ -22,6 +22,12 @@ final class PalettedBlockArray{
 	 * @return int[]
 	 */
 	public function getPalette() : array{}
+
+	/**
+	 * Returns the palette serialized as little-endian uint32s, in the same order as getPalette().
+	 * This avoids building an intermediate PHP array, unlike pack("L*", ...$array->getPalette()).
+	 */
+	public function getPaletteBytes() : string{}
 
 	/**
 	 * The input array must be the same size as the current palette
