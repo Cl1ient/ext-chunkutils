@@ -17,6 +17,8 @@ typedef struct {
 
 extern zend_class_entry* paletted_block_array_entry;
 
+bool paletted_block_array_check_entry_size(zend_long v, zend_class_entry* exception_ce);
+
 bool paletted_block_array_fill(paletted_block_array_obj* intern, zend_long fillEntry);
 
 #endif

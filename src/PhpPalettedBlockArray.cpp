@@ -24,7 +24,7 @@ static zend_object_handlers paletted_block_array_handlers;
 
 /* internal object methods */
 
-static inline bool checkPaletteEntrySize(zend_long v, zend_class_entry* exception_ce) {
+bool paletted_block_array_check_entry_size(zend_long v, zend_class_entry* exception_ce) {
 	Block casted = (Block)v;
 	zend_long castedBack = (zend_long)casted;
 	if (castedBack != v) {
@@ -46,7 +46,7 @@ static bool palette_data_from_array(HashTable* paletteHt, std::vector<Block>& pa
 		zend_hash_move_forward_ex(paletteHt, &pos)
 		) {
 
-		if (!checkPaletteEntrySize(Z_LVAL_P(current), exception_ce)) {
+		if (!paletted_block_array_check_entry_size(Z_LVAL_P(current), exception_ce)) {
 			return false;
 		}
 		b = (Block)Z_LVAL_P(current);
@@ -259,7 +259,7 @@ end:
 
 
 bool paletted_block_array_fill(paletted_block_array_obj* intern, zend_long fillEntry) {
-	if (!checkPaletteEntrySize(fillEntry, spl_ce_InvalidArgumentException)) {
+	if (!paletted_block_array_check_entry_size(fillEntry, spl_ce_InvalidArgumentException)) {
 		return false;
 	}
 

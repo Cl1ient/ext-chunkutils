@@ -12,6 +12,7 @@ extern "C" {
 #include "ext/standard/php_var.h"
 #include "Zend/zend_exceptions.h"
 #include "Zend/zend_hash.h"
+#include "ext/spl/spl_exceptions.h"
 }
 
 #define SUB_CHUNK_COORD_BIT_SIZE 4
@@ -34,7 +35,29 @@ static inline sub_chunk_obj* fetch_intern(zend_object* object) {
 	return fetch_from_zend_object<sub_chunk_obj>(object);
 }
 
-#define sub_chunk_this() fetch_intern(Z_OBJ_P(getThis()))
+/*
+ * A SubChunk whose constructor never ran (subclass that doesn't call the parent constructor,
+ * ReflectionClass::newInstanceWithoutConstructor()) has no biome array. Every method relies on it
+ * being there, so such an object is refused instead of being dereferenced.
+ */
+static inline bool is_initialized(const sub_chunk_obj* object) {
+	return object->biomes != nullptr;
+}
+
+static inline sub_chunk_obj* fetch_initialized(zend_object* object) {
+	sub_chunk_obj* intern = fetch_intern(object);
+	if (UNEXPECTED(!is_initialized(intern))) {
+		zend_throw_error(NULL, "%s has not been initialized, its constructor was not called", ZSTR_VAL(object->ce->name));
+		return nullptr;
+	}
+	return intern;
+}
+
+#define SUB_CHUNK_FETCH_THIS(intern) \
+	sub_chunk_obj* intern = fetch_initialized(Z_OBJ_P(getThis())); \
+	if (intern == nullptr) { \
+		return; \
+	}
 
 /* internal object handlers */
 
@@ -113,7 +136,10 @@ static void sub_chunk_serialize_light(smart_str* buf, light_array_obj* lightArra
 }
 
 static int sub_chunk_serialize(zval* obj, unsigned char** buffer, size_t* buf_len, zend_serialize_data* data) {
-	sub_chunk_obj* object = fetch_intern(Z_OBJ_P(obj));
+	sub_chunk_obj* object = fetch_initialized(Z_OBJ_P(obj));
+	if (object == nullptr) {
+		return FAILURE;
+	}
 
 	smart_str buf = { 0 };
 	php_serialize_data_t serialize_data = (php_serialize_data_t)data;
@@ -171,6 +197,9 @@ static int sub_chunk_unserialize(zval* object, zend_class_entry* ce, const unsig
 		zend_throw_exception(NULL, "Failed to unserialize SubChunk::emptyBlockId", 0);
 		goto end;
 	}
+	if (!paletted_block_array_check_entry_size(Z_LVAL_P(emptyBlockId), zend_ce_exception)) {
+		goto end;
+	}
 
 	blockLayers = var_tmp_var(&unserialize_data);
 	if (!php_var_unserialize(blockLayers, &start, end, &unserialize_data) || Z_TYPE_P(blockLayers) != IS_ARRAY) {
@@ -203,7 +232,7 @@ static int sub_chunk_unserialize(zval* object, zend_class_entry* ce, const unsig
 		goto end;
 	}
 
-	object_init_ex(object, sub_chunk_entry);
+	object_init_ex(object, ce);
 	intern = fetch_intern(Z_OBJ_P(object));
 	intern->emptyBlockId = Z_LVAL_P(emptyBlockId);
 
@@ -284,6 +313,15 @@ SUB_CHUNK_METHOD(__construct) {
 		Z_PARAM_OBJECT_OF_CLASS_EX(blockLight, light_array_entry, 1, 0)
 	ZEND_PARSE_PARAMETERS_END();
 
+	auto intern = fetch_intern(Z_OBJ_P(getThis()));
+	if (is_initialized(intern)) {
+		zend_throw_error(NULL, "%s has already been initialized", ZSTR_VAL(Z_OBJCE_P(getThis())->name));
+		return;
+	}
+	if (!paletted_block_array_check_entry_size(emptyBlockId, spl_ce_InvalidArgumentException)) {
+		return;
+	}
+
 	zval* layer;
 	ZEND_HASH_FOREACH_VAL(htBlockLayers, layer) {
 		if (!is_instance_of(layer, paletted_block_array_entry)) {
@@ -292,7 +330,6 @@ SUB_CHUNK_METHOD(__construct) {
 		}
 	} ZEND_HASH_FOREACH_END();
 
-	auto intern = sub_chunk_this();
 	intern->emptyBlockId = emptyBlockId;
 
 	intern->blockLayers.reserve(zend_hash_num_elements(htBlockLayers));
@@ -315,23 +352,25 @@ SUB_CHUNK_METHOD(__construct) {
 }
 
 SUB_CHUNK_METHOD(isEmptyAuthoritative) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	auto intern = sub_chunk_this();
+	SUB_CHUNK_FETCH_THIS(intern);
 	sub_chunk_collect_garbage(intern);
 	RETURN_BOOL(intern->blockLayers.empty());
 }
 
 SUB_CHUNK_METHOD(isEmptyFast) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	RETURN_BOOL(sub_chunk_this()->blockLayers.empty());
+	SUB_CHUNK_FETCH_THIS(intern);
+	RETURN_BOOL(intern->blockLayers.empty());
 }
 
 SUB_CHUNK_METHOD(getEmptyBlockId) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	RETURN_LONG(sub_chunk_this()->emptyBlockId);
+	SUB_CHUNK_FETCH_THIS(intern);
+	RETURN_LONG(intern->emptyBlockId);
 }
 
 SUB_CHUNK_METHOD(getBlockStateId) {
@@ -343,7 +382,7 @@ SUB_CHUNK_METHOD(getBlockStateId) {
 		Z_PARAM_LONG(z)
 	ZEND_PARSE_PARAMETERS_END();
 
-	auto intern = sub_chunk_this();
+	SUB_CHUNK_FETCH_THIS(intern);
 	if (intern->blockLayers.empty()) {
 		RETURN_LONG(intern->emptyBlockId);
 	}
@@ -360,7 +399,11 @@ SUB_CHUNK_METHOD(setBlockStateId) {
 		Z_PARAM_LONG(block)
 	ZEND_PARSE_PARAMETERS_END();
 
-	auto intern = sub_chunk_this();
+	SUB_CHUNK_FETCH_THIS(intern);
+	if (!paletted_block_array_check_entry_size(block, spl_ce_InvalidArgumentException)) {
+		return;
+	}
+
 	paletted_block_array_obj* blockLayer;
 	if (intern->blockLayers.empty()) {
 		zval zvNewLayer;
@@ -378,9 +421,9 @@ SUB_CHUNK_METHOD(setBlockStateId) {
 }
 
 SUB_CHUNK_METHOD(getBlockLayers) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	auto intern = sub_chunk_this();
+	SUB_CHUNK_FETCH_THIS(intern);
 	if (intern->blockLayers.empty()) {
 		//most subchunks in a world are air, and the immutable empty array costs nothing to hand out
 		RETURN_EMPTY_ARRAY();
@@ -402,7 +445,7 @@ SUB_CHUNK_METHOD(getHighestBlockAt) {
 		Z_PARAM_LONG(z)
 	ZEND_PARSE_PARAMETERS_END();
 
-	auto intern = sub_chunk_this();
+	SUB_CHUNK_FETCH_THIS(intern);
 	if (intern->blockLayers.empty()) {
 		RETURN_NULL();
 	}
@@ -417,9 +460,10 @@ SUB_CHUNK_METHOD(getHighestBlockAt) {
 }
 
 SUB_CHUNK_METHOD(getBiomeArray) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	RETURN_OBJ_COPY(&sub_chunk_this()->biomes->std);
+	SUB_CHUNK_FETCH_THIS(intern);
+	RETURN_OBJ_COPY(&intern->biomes->std);
 }
 
 static inline light_array_obj* ensure_light_array_initialized(light_array_obj** lightArray) {
@@ -434,15 +478,17 @@ static inline light_array_obj* ensure_light_array_initialized(light_array_obj** 
 }
 
 SUB_CHUNK_METHOD(getBlockSkyLightArray) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	RETURN_OBJ_COPY(&ensure_light_array_initialized(&sub_chunk_this()->skyLight)->std);
+	SUB_CHUNK_FETCH_THIS(intern);
+	RETURN_OBJ_COPY(&ensure_light_array_initialized(&intern->skyLight)->std);
 }
 
 SUB_CHUNK_METHOD(getBlockLightArray) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	RETURN_OBJ_COPY(&ensure_light_array_initialized(&sub_chunk_this()->blockLight)->std);
+	SUB_CHUNK_FETCH_THIS(intern);
+	RETURN_OBJ_COPY(&ensure_light_array_initialized(&intern->blockLight)->std);
 }
 
 #define macro_SubChunk_setLightArray(lightArrayFieldName) \
@@ -450,12 +496,13 @@ SUB_CHUNK_METHOD(getBlockLightArray) {
 	ZEND_PARSE_PARAMETERS_START_EX(ZEND_PARSE_PARAMS_THROW, 1, 1) \
 		Z_PARAM_OBJECT_OF_CLASS(data, light_array_entry) \
 	ZEND_PARSE_PARAMETERS_END(); \
-	auto intern = sub_chunk_this(); \
-	if (intern->lightArrayFieldName != nullptr) { \
-		OBJ_RELEASE(&intern->lightArrayFieldName->std); \
-	} \
+	SUB_CHUNK_FETCH_THIS(intern); \
+	light_array_obj* const previous = intern->lightArrayFieldName; \
 	intern->lightArrayFieldName = fetch_from_zend_object<light_array_obj>(Z_OBJ_P(data)); \
-	Z_ADDREF_P(data);
+	Z_ADDREF_P(data); \
+	if (previous != nullptr) { \
+		OBJ_RELEASE(&previous->std); \
+	}
 
 SUB_CHUNK_METHOD(setBlockSkyLightArray) {
 	macro_SubChunk_setLightArray(skyLight);
@@ -466,15 +513,16 @@ SUB_CHUNK_METHOD(setBlockLightArray) {
 }
 
 SUB_CHUNK_METHOD(__debugInfo) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
 	array_init(return_value);
 }
 
 SUB_CHUNK_METHOD(collectGarbage) {
-	zend_parse_parameters_none_throw();
+	ZEND_PARSE_PARAMETERS_NONE();
 
-	sub_chunk_collect_garbage(sub_chunk_this());
+	SUB_CHUNK_FETCH_THIS(intern);
+	sub_chunk_collect_garbage(intern);
 }
 
 void register_sub_chunk_class() {
