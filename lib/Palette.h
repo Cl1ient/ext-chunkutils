@@ -121,10 +121,10 @@ public:
 		initFromData(paletteEntries);
 	}
 
-	LargePalette(const LargePalette& otherArray) {
-		palette = otherArray.palette;
-		blockToOffset = otherArray.blockToOffset;
-	}
+	//The lookup map is left out of the copy: it is populated lazily by addOrLookup(), and a copy
+	//that is never written to (a chunk cloned to be read or sent) doesn't need it at all. Copying
+	//it made cloning cost more than every other part of the array put together.
+	LargePalette(const LargePalette& otherArray) : palette(otherArray.palette) {}
 
 	Block get(unsigned int offset) const {
 		return palette[offset];
